@@ -103,7 +103,7 @@ class MainMenu:
 # ─────────────────────────── ModeSelect ───────────────────────────────
 
 class ModeSelect:
-    OPTIONS = ["PvP Mata-Mata", "Cooperativo (2J vs 2 Bots)", "Voltar"]
+    OPTIONS = ["PvP Mata-Mata", "1v1 (Player vs PC)", "Cooperativo (2J vs 2 Bots)", "Voltar"]
 
     def __init__(self):
         self._tick   = 0
@@ -143,12 +143,12 @@ class ModeSelect:
             cx     = WINDOW_W // 2 - surf.get_width() // 2
             if selected:
                 pygame.draw.rect(surface, (30, 42, 60),
-                                 (cx - 12, 210 + i * 60 - 4,
+                                 (cx - 12, 200 + i * 52 - 4,
                                   surf.get_width() + 24, 38), border_radius=6)
                 pygame.draw.rect(surface, C_HUD_ACCENT,
-                                 (cx - 12, 210 + i * 60 - 4,
+                                 (cx - 12, 200 + i * 52 - 4,
                                   surf.get_width() + 24, 38), 2, border_radius=6)
-            surface.blit(surf, (cx, 210 + i * 60))
+            surface.blit(surf, (cx, 200 + i * 52))
 
 
 # ─────────────────────────── PlayerSelect ─────────────────────────────
@@ -164,10 +164,11 @@ class PlayerSelect:
     ]
     SKIN_NAMES = ["Amber", "Sky Blue", "Mint", "Coral"]
 
-    def __init__(self, num_players: int = 1):
+    def __init__(self, num_players: int = 1, mode: str = "PvP"):
         self._tick       = 0
         self._num        = num_players   # 1 or 2
-        self._skins      = [0, 1]        # skin index per player
+        self._mode       = mode          # "PvP", etc
+        self._skins      = [0, 1] if num_players > 1 else [0]
         self._active_p   = 0            # which player's skin we're editing
         self._confirmed  = False
         self._fonts      = None
@@ -181,8 +182,12 @@ class PlayerSelect:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT:
                 self._skins[self._active_p] = (self._skins[self._active_p] - 1) % 4
+                if self._num > 1 and self._skins[0] == self._skins[1]:
+                    self._skins[self._active_p] = (self._skins[self._active_p] - 1) % 4
             elif event.key == pygame.K_RIGHT:
                 self._skins[self._active_p] = (self._skins[self._active_p] + 1) % 4
+                if self._num > 1 and self._skins[0] == self._skins[1]:
+                    self._skins[self._active_p] = (self._skins[self._active_p] + 1) % 4
             elif event.key == pygame.K_TAB and self._num > 1:
                 self._active_p = 1 - self._active_p
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
@@ -203,26 +208,63 @@ class PlayerSelect:
         _draw_bg(surface, self._tick)
         _draw_title(surface, ft, self._tick)
 
-        _render_centered(surface, "SELECIONE AS SKINS", fh, C_HUD_TEXT, 150)
-        hint_tab = "  [TAB] Alternar jogador" if self._num > 1 else ""
-        _render_centered(surface, f"[←→] Mudar skin{hint_tab}   [ENTER] Confirmar",
+        # Título e dica adaptados ao modo
+        if self._mode == 'coop':
+            title_txt = "COR DO SEU TIME"
+            hint_extra = ""
+        elif self._mode == '1v1':
+            title_txt = "SELECIONE SUA COR"
+            hint_extra = ""
+        else:  # pvp
+            title_txt = "SELECIONE AS SKINS"
+            hint_extra = "   [TAB] Alternar jogador"
+
+        _render_centered(surface, title_txt, fh, C_HUD_TEXT, 150)
+        _render_centered(surface,
+                         f"[\u2190\u2192] Mudar cor{hint_extra}   [ENTER] Confirmar",
                          fs, (100, 120, 140), 185)
 
         for pi in range(self._num):
-            ox = WINDOW_W // 4 * (pi * 2 + 1)
+            # Posicão X: centralizado se 1 jogador, lado-a-lado se 2
+            if self._num == 1:
+                ox = WINDOW_W // 2
+            else:
+                ox = WINDOW_W // 4 * (pi * 2 + 1)
+
             skin_color = self.SKINS[self._skins[pi]]
             selected   = (pi == self._active_p)
 
-            # Preview circle
-            radius = 36 if selected else 28
+            # Círculo de preview com pulso no selecionado
+            radius = 40 if selected else 30
             border = C_HUD_ACCENT if selected else C_HUD_TEXT
             pygame.draw.circle(surface, skin_color, (ox, 290), radius)
             pygame.draw.circle(surface, border,     (ox, 290), radius, 3)
 
-            label = fh.render(f"P{pi+1}", True, border)
-            surface.blit(label, (ox - label.get_width() // 2, 340))
+            # Label contextual
+            if self._mode == '1v1':
+                p_label = "Voc\u00ea (P1)"
+            elif self._mode == 'coop' and self._num == 1:
+                p_label = "Seu Time"
+            else:
+                p_label = f"P{pi + 1}"
+
+            lbl = fh.render(p_label, True, border)
+            surface.blit(lbl, (ox - lbl.get_width() // 2, 342))
             sname = fb.render(self.SKIN_NAMES[self._skins[pi]], True, skin_color)
-            surface.blit(sname, (ox - sname.get_width() // 2, 368))
+            surface.blit(sname, (ox - sname.get_width() // 2, 370))
+
+        # No modo 1v1: mostra o bot adversario no lado direito (auto)
+        if self._mode == '1v1':
+            from settings import PLAYER_COLORS
+            human_color = self.SKINS[self._skins[0]]
+            bot_color   = next((c for c in PLAYER_COLORS if c != human_color), (220, 80, 60))
+            bx = WINDOW_W * 3 // 4
+            pygame.draw.circle(surface, bot_color,      (bx, 290), 30)
+            pygame.draw.circle(surface, (200, 60, 60),  (bx, 290), 30, 3)
+            bot_lbl = fh.render("Bot (auto)", True, (200, 60, 60))
+            surface.blit(bot_lbl, (bx - bot_lbl.get_width() // 2, 342))
+            bot_nm = fb.render("Inimigo", True, bot_color)
+            surface.blit(bot_nm, (bx - bot_nm.get_width() // 2, 370))
 
 
 # ─────────────────────────── OptionsMenu ──────────────────────────────

@@ -69,10 +69,17 @@ CONTROLS = {
 }
 
 # --- Difficulty ---
+# interval: ms entre decisões de IA (menor = mais reativo)
+# flee_margin: ms restantes no fuse para começar a fugir
+# speed_mult: multiplicador sobre PLAYER_SPEED base
+# aggression_range: alcance em tiles para caça ativa e colocação de bomba
 DIFFICULTY = {
-    'easy':   {'interval': 1500, 'flee_margin': 2000},
-    'medium': {'interval': 800,  'flee_margin': 1200},
-    'hard':   {'interval': 280,  'flee_margin': 600},
+    # flee_margin: ms do fuse restante para começar a fugir.
+    # ALTO = foge cedo = sobrevive mais = bot mais difícil de matar.
+    # BAIXO = foge tarde = leva dano com frequência = bot mais fácil.
+    'easy':   {'interval': 1800, 'flee_margin': 400,  'speed_mult': 0.60, 'aggression_range': 2},
+    'medium': {'interval': 850,  'flee_margin': 1100, 'speed_mult': 0.90, 'aggression_range': 4},
+    'hard':   {'interval': 180,  'flee_margin': 2200, 'speed_mult': 1.20, 'aggression_range': 8},
 }
 
 # --- Timing ---
@@ -87,4 +94,4 @@ PLAYER_SPEED   = 3.0    # px/frame
 PLAYER_LIVES   = 3
 PLAYER_BOMBS   = 1
 PLAYER_RANGE   = 2
-HITBOX_SHRINK  = 6      # pixels inset on each side for collision box
+HITBOX_SHRINK  = 10     # pixels inset em cada lado da hitbox (tile=48, hitbox=28)

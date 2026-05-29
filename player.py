@@ -59,6 +59,9 @@ class Player:
         # Death animation
         self._death_t = 0
 
+        # Edge-trigger para colocação de bomba (evita auto-repeat do get_pressed)
+        self._bomb_was_pressed = False
+
     # ------------------------------------------------------------------
     # Geometry helpers
     # ------------------------------------------------------------------
@@ -135,7 +138,7 @@ class Player:
                 self._inv_t = 2000
             return None
 
-        # --- Read movement input ---
+        # --- Movimento ---
         ctrl = CONTROLS.get(self.player_id, {})
         dx, dy = 0, 0
         if keys[ctrl.get('up',    -1)]: dy = -1
@@ -150,72 +153,86 @@ class Player:
         else:
             self.state = IDLE
 
-        # --- Bomb placement ---
+        # --- Colocação de bomba (edge-triggered: apenas no primeiro frame do press) ---
         bomb_key = ctrl.get('bomb', -1)
-        if keys[bomb_key]:
+        bomb_pressed = keys[bomb_key]
+        if bomb_pressed and not self._bomb_was_pressed:
             new_bomb = self.place_bomb()
+        self._bomb_was_pressed = bomb_pressed
 
         return new_bomb
 
     def _move(self, dx: int, dy: int, game_map, all_bombs: list):
         step = self.speed
 
-        # --- Own-bomb passthrough ---
-        # Use PIXEL rect overlap (not tile center) to decide if player
-        # has physically left their own bomb's cell.
+        # --- Passthrough na própria bomba ---
         player_rect = self.get_rect()
         passthrough: set[tuple] = set()
         still_overlapping: list = []
 
         for b in self._own_bombs:
             if not b.alive:
-                continue  # bomb exploded — remove from own list
+                continue
             bomb_area = pygame.Rect(
                 b.col * TILE_SIZE, b.row * TILE_SIZE, TILE_SIZE, TILE_SIZE
             )
             if player_rect.colliderect(bomb_area):
-                # Still physically on bomb tile → pass through it
                 passthrough.add((b.col, b.row))
                 still_overlapping.append(b)
-            # If no overlap → player has fully left → bomb is now solid
 
-        # Keep only bombs we're still standing on
         self._own_bombs = still_overlapping
 
-        # All bomb tiles that block movement (excluding passthrough)
         bomb_tiles = {
             (b.col, b.row) for b in all_bombs if (b.col, b.row) not in passthrough
         }
 
-        # --- Axis-separated AABB collision ---
-        new_px = self.px + dx * step
-        new_py = self.py + dy * step
         s = HITBOX_SHRINK
 
-        # Test X-axis
-        can_x = True
-        for cx2 in [new_px + s, new_px + TILE_SIZE - s - 1]:
-            for cy2 in [self.py + s, self.py + TILE_SIZE - s - 1]:
-                tc = int(cx2) // TILE_SIZE
-                tr = int(cy2) // TILE_SIZE
-                if not game_map.is_walkable(tc, tr) or (tc, tr) in bomb_tiles:
-                    can_x = False
+        def blocked(px: float, py: float) -> bool:
+            for cx2 in [px + s, px + TILE_SIZE - s - 1]:
+                for cy2 in [py + s, py + TILE_SIZE - s - 1]:
+                    tc = int(cx2) // TILE_SIZE
+                    tr = int(cy2) // TILE_SIZE
+                    if not game_map.is_walkable(tc, tr) or (tc, tr) in bomb_tiles:
+                        return True
+            return False
 
-        # Test Y-axis
-        can_y = True
-        for cx2 in [self.px + s, self.px + TILE_SIZE - s - 1]:
-            for cy2 in [new_py + s, new_py + TILE_SIZE - s - 1]:
-                tc = int(cx2) // TILE_SIZE
-                tr = int(cy2) // TILE_SIZE
-                if not game_map.is_walkable(tc, tr) or (tc, tr) in bomb_tiles:
-                    can_y = False
+        # --- Auto-alinhamento de corredor ---
+        # Quando move em Y mas está desalinhado do centro do tile em X,
+        # desliza suavemente para o centro (e vice-versa). Elimina travamentos.
+        ALIGN_SPEED = min(step, 2.0)   # velocidade do deslize lateral
+        ALIGN_THRESHOLD = TILE_SIZE // 2  # só alinha se próximo ao centro
 
-        if can_x:
-            self.px = new_px
-        if can_y:
-            self.py = new_py
+        new_px = self.px + dx * step
+        new_py = self.py + dy * step
 
-        # Clamp inside playable area
+        # Movimento X
+        if dx != 0:
+            if not blocked(new_px, self.py):
+                self.px = new_px
+            else:
+                # Tenta deslizar em Y para desencavar do canto
+                tile_cy = (self.row * TILE_SIZE)
+                off = self.py - tile_cy
+                if 0 < abs(off) <= ALIGN_THRESHOLD:
+                    nudge = ALIGN_SPEED if off < 0 else -ALIGN_SPEED
+                    if not blocked(self.px, self.py + nudge):
+                        self.py = self.py + nudge
+
+        # Movimento Y
+        if dy != 0:
+            if not blocked(self.px, new_py):
+                self.py = new_py
+            else:
+                # Tenta deslizar em X para desencavar do canto
+                tile_cx = (self.col * TILE_SIZE)
+                off = self.px - tile_cx
+                if 0 < abs(off) <= ALIGN_THRESHOLD:
+                    nudge = ALIGN_SPEED if off < 0 else -ALIGN_SPEED
+                    if not blocked(self.px + nudge, self.py):
+                        self.px = self.px + nudge
+
+        # Clamp dentro da área jogável
         self.px = max(TILE_SIZE, min((GRID_W - 2) * TILE_SIZE, self.px))
         self.py = max(TILE_SIZE, min((GRID_H - 2) * TILE_SIZE, self.py))
 

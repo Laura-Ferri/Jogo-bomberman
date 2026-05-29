@@ -75,15 +75,20 @@ def main():
             elif state == STATE_MODE:
                 action = mode_select.handle_event(event)
                 if action == "PvP Mata-Mata":
-                    mode   = 'pvp'
-                    player_select = PlayerSelect(2)
-                    state  = STATE_PLAYERS
+                    mode          = 'pvp'
+                    player_select = PlayerSelect(2, 'pvp')
+                    state         = STATE_PLAYERS
+                elif action == "1v1 (Player vs PC)":
+                    mode          = '1v1'
+                    player_select = PlayerSelect(1, '1v1')
+                    state         = STATE_PLAYERS
                 elif action == "Cooperativo (2J vs 2 Bots)":
-                    mode   = 'coop'
-                    player_select = PlayerSelect(2)
-                    state  = STATE_PLAYERS
+                    # Apenas cor do time importa; game.py aplica em P1 e P2
+                    mode          = 'coop'
+                    player_select = PlayerSelect(1, 'coop')
+                    state         = STATE_PLAYERS
                 elif action == "Voltar":
-                    state  = STATE_MAIN
+                    state         = STATE_MAIN
 
             elif state == STATE_PLAYERS:
                 cfg = player_select.handle_event(event)

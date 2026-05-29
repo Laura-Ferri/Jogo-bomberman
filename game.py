@@ -11,8 +11,8 @@ from menu import PauseMenu, ResultScreen
 class Game:
     """
     Core game coordinator.
-    Manages the game loop: input → update → render.
-    Modes: 'pvp' | 'coop'
+    Gerencia o loop: input → update → render.
+    Modos: 'pvp' | '1v1' | 'coop'
     """
 
     def __init__(self, mode: str, player_colors: list[tuple],
@@ -50,19 +50,32 @@ class Game:
     # ------------------------------------------------------------------
     def _setup_entities(self, player_colors: list[tuple]):
         if self.mode == 'pvp':
+            # Dois jogadores humanos com cores individuais
             for i, color in enumerate(player_colors):
                 self._players.append(Player(i, color))
-        elif self.mode == 'coop':
-            # Aliados: mesma cor (do player 1)
+
+        elif self.mode == '1v1':
+            # Um humano (P1) vs um bot com cor contrastante
             human_color = player_colors[0]
-            for i, _ in enumerate(player_colors):
+            self._players.append(Player(0, human_color))
+            # Escolhe a primeira cor de PLAYER_COLORS que contraste com o humano
+            bot_color = next(
+                (c for c in PLAYER_COLORS if c != human_color),
+                (220, 80, 60)  # fallback: coral
+            )
+            self._bots.append(Bot(2, bot_color, self.difficulty))
+
+        elif self.mode == 'coop':
+            # Dois humanos aliados (mesma cor base)
+            human_color = player_colors[0]
+            for i in range(2):
                 self._players.append(Player(i, human_color))
-            
-            # Bots: cor diferente
-            available_bot_colors = [c for c in PLAYER_COLORS if c != human_color]
-            bot_colors = [available_bot_colors[0], available_bot_colors[1]]
-            for j, bc in enumerate(bot_colors):
-                self._bots.append(Bot(2 + j, bc, self.difficulty))
+
+            # Todos os bots inimigos com UMA cor padronizada para o time adversário
+            available = [c for c in PLAYER_COLORS if c != human_color]
+            enemy_team_color = available[0]          # cor única do time inimigo
+            for j in range(2):
+                self._bots.append(Bot(2 + j, enemy_team_color, self.difficulty))
 
     @staticmethod
     def _generate_retro_sound(sound_type: str):
@@ -225,8 +238,18 @@ class Game:
                 winner_label = f"P{winner.player_id + 1}" if winner else "Empate!"
                 self._finish(winner_label)
 
+        elif self.mode == '1v1':
+            alive_p   = [p for p in self._players if p.alive or p.state == RESPAWNING]
+            alive_b   = [b for b in self._bots    if b.alive or b.state == RESPAWNING]
+            if not alive_p and not alive_b:
+                self._finish("Empate!")
+            elif not alive_b:
+                self._finish("P1")
+            elif not alive_p:
+                self._finish("Bot")
+
         elif self.mode == 'coop':
-            alive_bots    = [b for b in self._bots   if b.alive or b.state == RESPAWNING]
+            alive_bots    = [b for b in self._bots    if b.alive or b.state == RESPAWNING]
             alive_players = [p for p in self._players if p.alive or p.state == RESPAWNING]
             if not alive_bots:
                 self._finish("Jogadores")
